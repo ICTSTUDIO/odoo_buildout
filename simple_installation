@@ -1,0 +1,26 @@
+#!/bin/bash
+
+
+echo "you are going to create a odoo Project with this script"
+echo "-----------------------------------------------------------"
+echo -n "Enter a name for your project Folder : "
+read folder_name
+echo "-----------------------------------------------------------"
+location_to_folder=$HOME/odoo_projects
+mkdir -p $location_to_folder/$folder_name
+echo "your folder $location_to_folder/$folder_name created"
+cd $location_to_folder/$folder_name
+wget https://raw.githubusercontent.com/Odooswiss/odoo_buildout/master/buildout.cfg
+wget https://raw.githubusercontent.com/Odooswiss/odoo_buildout/master/prod.cfg
+wget https://raw.githubusercontent.com/Odooswiss/odoo_buildout/master/bootstrap.py
+virtualenv sandbox --no-setuptools
+sandbox/bin/python bootstrap.py
+bin/buildout -c prod.cfg
+sed -i s/"db_name = .*"/"db_name = $folder_name"/g etc/odoo.cfg
+sed -i s/"dbfilter = .*"/"dbfilter = ^$folder_name$"/g etc/odoo.cfg
+#admin_pass="$(pwgen -s -1)" #Generates a secure password for odoo admin user
+sed -i s/"admin_passwd = .*"/"admin_passwd = "$(pwgen -s -1)""/g etc/odoo.cfg
+
+echo "-----------------------------------------------------------"
+echo "your installation is done!"
+echo "you can start your odoo from \"$location_to_folder/$folder_name/bin/start_odoo \" "
