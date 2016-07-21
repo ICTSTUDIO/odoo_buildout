@@ -8,6 +8,7 @@ echo "-----------------------------------------------------------"
 
 project_path=$location_to_folder/$folder_name
 mkdir -p $location_to_folder/$folder_name/{data,logs}
+touch $project_path/logs/odoo_log.log
 
 echo "your folder $location_to_folder/$folder_name created"
 cd $location_to_folder/$folder_name
