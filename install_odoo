@@ -1,5 +1,5 @@
 #!/bin/bash
-echo -n "Enter a name for your User a project Folder will be created with this name  : "
+echo -n "Enter a name for your User, a project Folder will be created with this name  : "
 read folder_name
 echo "-----------------------------------------------------------"
 odoopwd=$(pwgen -s -1)
