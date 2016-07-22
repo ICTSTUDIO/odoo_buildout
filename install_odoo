@@ -1,17 +1,18 @@
 #!/bin/bash
-echo "you are going to create a odoo Project with this script"
-echo "-----------------------------------------------------------"
-location_to_folder=$HOME/odoo_projects
-echo -n "Enter a name for your project Folder : "
+echo -n "Enter a name for your User a project Folder will be created with this name  : "
 read folder_name
 echo "-----------------------------------------------------------"
+odoopwd=$(pwgen -s -1)
+#sudo useradd -m -U -s /bin/nologin $folder_name
+adduser $folder_name --home /opt/$folder_name --gecos "" --disabled-login
 
-project_path=$location_to_folder/$folder_name
-mkdir -p $location_to_folder/$folder_name/{data,logs}
-touch $project_path/logs/odoo_log.log
+mkdir -p /opt/$folder_name/{data,logs}
+touch /opt/$folder_name/logs/odoo.log
 
-echo "your folder $location_to_folder/$folder_name created"
-cd $location_to_folder/$folder_name
+
+cd /opt/$folder_name
+su postgres -c "psql --command \"CREATE USER $folder_name WITH PASSWORD '$odoopwd'\""
+su postgres -c "psql --command \"ALTER USER $folder_name CREATEDB\""
 
 wget https://raw.githubusercontent.com/Odooswiss/odoo_buildout/master/buildout.cfg
 wget https://raw.githubusercontent.com/Odooswiss/odoo_buildout/master/prod.cfg
@@ -25,11 +26,9 @@ sed -i s/"dbfilter = .*"/"dbfilter = ^$folder_name$"/g etc/odoo.cfg
 
 #admin_pass="$(pwgen -s -1)" #Generates a secure password for odoo admin user
 #sed -i s/"admin_passwd = .*"/"admin_passwd = "$(pwgen -s -1)""/g etc/odoo.cfg
-sed -i s/"admin_password = .*"/"admin_password = "$(pwgen -s -1)""/g etc/odoo.cfg
+sed -i s/"admin_password = .*"/"admin_password = $odoopwd"/g etc/odoo.cfg
 sed -i s/"logrotate = .*"/"logrotate = True"/g etc/odoo.cfg
-sed -i s/"db_name = .*"/"db_name = $folder_name"/g etc/odoo.cfg
+sed -i s/"db_host = .*"/"db_host = localhost"/g etc/odoo.cfg
+sed -i s/"db_user = .*"/"db_user = $folder_name"/g etc/odoo.cfg
+sed -i s/"db_password = .*"/"db_password = $odoopwd"/g etc/odoo.cfg
 
-
-echo "-----------------------------------------------------------"
-echo "your installation is done!"
-echo "you can start your odoo from \"$location_to_folder/$folder_name/bin/start_odoo \" "
