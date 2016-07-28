@@ -1,0 +1,137 @@
+#!/bin/bash
+echo -n "Enter a name for your User, a project Folder will be created with this name  : "
+read folder_name
+echo "-----------------------------------------------------------"
+odoopwd=$(pwgen -s -1)
+proj_path=/opt/$folder_name
+
+#sudo useradd -m -U -s /bin/nologin $folder_name
+adduser $folder_name --home /opt/$folder_name --gecos "" --disabled-login
+
+mkdir -p $proj_path/{data,logs}
+touch $proj_path/logs/odoo.log
+
+
+su postgres -c "psql --command \"CREATE USER $folder_name WITH PASSWORD '$odoopwd'\""
+su postgres -c "psql --command \"ALTER USER $folder_name CREATEDB\""
+#sudo -u postgres createuser --createdb $folder_name **gives error as root
+
+cd $proj_path
+
+wget https://raw.githubusercontent.com/Odooswiss/odoo_buildout/master/buildout.cfg
+wget https://raw.githubusercontent.com/Odooswiss/odoo_buildout/master/prod.cfg
+wget https://raw.githubusercontent.com/Odooswiss/odoo_buildout/master/bootstrap.py
+virtualenv sandbox --no-setuptools
+sandbox/bin/python bootstrap.py
+bin/buildout -c prod.cfg
+
+sed -i s/"db_name = .*"/"db_name = $folder_name"/g $proj_path/etc/odoo.cfg
+sed -i s/"dbfilter = .*"/"dbfilter = ^$folder_name$"/g $proj_path/etc/odoo.cfg
+
+#admin_pass="$(pwgen -s -1)" #Generates a secure password for odoo admin user
+#sed -i s/"admin_passwd = .*"/"admin_passwd = "$(pwgen -s -1)""/g etc/odoo.cfg
+sed -i s/"admin_password = .*"/"admin_password = $odoopwd"/g $proj_path/etc/odoo.cfg
+
+sed -i s/"db_user = .*"/"db_user = $folder_name"/g $proj_path/etc/odoo.cfg
+#sed -i s/"db_password = .*"/"db_password = $odoopwd"/g etc/odoo.cfg
+
+chown -R $folder_name:$folder_name $proj_path/*
+
+cat <<EOF > /lib/systemd/system/$folder_name.service
+[Unit]
+Description=Odoo 9.0
+After=postgresql.service
+
+[Service]
+Type=simple
+User=$folder_name
+Group=$folder_name
+ExecStart=$proj_path/bin/start_odoo
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl enable $folder_name.service
+service $folder_name start
+
+#cp /opt/$folder_name/parts/odoo/debian/init /etc/init.d/$folder_name
+#chmod +x /etc/init.d/$folder_name
+#chown root: /etc/init.d/$folder_name
+
+cat <<EOF > /etc/init.d/$folder_name 
+#!/bin/bash
+### BEGIN INIT INFO
+# Provides:          odoo.py
+# Required-Start:    $remote_fs $syslog
+# Required-Stop:     $remote_fs $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Start odoo daemon at boot time
+# Description:       Enable service provided by daemon.
+# X-Interactive:     true
+### END INIT INFO
+## more info: http://wiki.debian.org/LSBInitScripts
+
+. /lib/lsb/init-functions
+
+PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin
+DAEMON=$proj_path/bin/start_odoo
+NAME=$folder_name
+DESC=$folder_name_odoo
+PIDFILE=/var/run/${NAME}.pid
+USER=$folder_name
+export LOGNAME=$USER
+
+test -x $DAEMON || exit 0
+set -e
+
+function _start() {
+    start-stop-daemon --start --quiet --pidfile $PIDFILE --chuid $USER:$USER --background --make-pidfile --exec $DAEMON
+}
+
+function _stop() {
+    start-stop-daemon --stop --quiet --pidfile $PIDFILE --oknodo --retry 3
+    rm -f $PIDFILE
+}
+
+function _status() {
+    start-stop-daemon --status --quiet --pidfile $PIDFILE
+    return $?
+}
+
+
+case "$1" in
+        start)
+                echo -n "Starting $DESC: "
+                _start
+                echo "ok"
+                ;;
+        stop)
+                echo -n "Stopping $DESC: "
+                _stop
+                echo "ok"
+                ;;
+        restart|force-reload)
+                echo -n "Restarting $DESC: "
+                _stop
+                sleep 1
+                _start
+                echo "ok"
+                ;;
+        status)
+                echo -n "Status of $DESC: "
+                _status && echo "running" || echo "stopped"
+                ;;
+        *)
+                N=/etc/init.d/$NAME
+                echo "Usage: $N {start|stop|restart|force-reload|status}" >&2
+                exit 1
+                ;;
+esac
+
+exit 0
+EOF
+chmod +x /etc/init.d/$folder_name
+chown root: /etc/init.d/$folder_name 
+update-rc.d $folder_name defaults
+/etc/init.d/$folder_name start  
